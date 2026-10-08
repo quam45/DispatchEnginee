@@ -1,0 +1,32 @@
+﻿<!DOCTYPE html>
+<html>
+<head>
+<title>DispatchEngine - Live Map</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/7.0.0/signalr.min.js"></script>
+<style>body{margin:0;font-family:Arial}#map{height:100vh}#panel{position:absolute;top:10px;left:50px;z-index:1000;background:white;padding:15px;border-radius:10px;box-shadow:0 2px 10px rgba(0,0,0,.2);max-width:320px}</style>
+</head>
+<body>
+<div id="panel">
+<h3>🚚 DispatchEngine LIVE</h3>
+<p>Order: <b id="ref">DIS_BDCA1432</b> - <span id="status" style="color:green">DELIVERED</span></p>
+<p>Rider 1: <span id="rider1">6.5017, 3.3792 (Yaba)</span></p>
+<p>Wallet: ₦15,000 | Last Pay: PAY_DIS_BDCA1432</p>
+<p style="font-size:12px">Test: POST /api/Riders/update-location?riderId=1&lat=6.55&lng=3.36</p>
+</div>
+<div id="map"></div>
+<script>
+var map = L.map('map').setView([6.56, 3.37], 12);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+var riderMarker = L.marker([6.5017, 3.3792]).addTo(map).bindPopup('Rider 1 - Yaba');
+var pickup = L.marker([6.5244, 3.3792]).addTo(map).bindPopup('📦 Pickup: Yaba');
+var dropoff = L.marker([6.6018, 3.3515]).addTo(map).bindPopup('🏁 Dropoff: Ikeja Mall');
+L.polyline([[6.5244, 3.3792],[6.6018, 3.3515]], {color:'blue', dashArray:'10,10'}).addTo(map);
+var conn = new signalR.HubConnectionBuilder().withUrl('/hubs/tracking').build();
+conn.on('RiderLocationUpdated', (id, lat, lng) => { riderMarker.setLatLng([lat, lng]); document.getElementById('rider1').innerText = lat.toFixed(4)+', '+lng.toFixed(4); });
+conn.on('OrderStatus', (ref, status) => { document.getElementById('ref').innerText = ref; document.getElementById('status').innerText = status; });
+conn.start().then(()=> console.log('SignalR connected'));
+</script>
+</body>
+</html>

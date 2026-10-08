@@ -1,0 +1,5 @@
+<Solution>
+  <Project Path="DispatchEngine.Api/DispatchEngine.Api.csproj" />
+  <Project Path="DispatchEngine.Core/DispatchEngine.Core.csproj" />
+  <Project Path="DispatchEngine.Infrastructure/DispatchEngine.Infrastructure.csproj" />
+</Solution>

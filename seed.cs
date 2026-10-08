@@ -1,0 +1,10 @@
+﻿using Microsoft.Data.SqlClient;
+var conn = "Server=localhost\\SQLEXPRESS;Database=DispatchEngine;Trusted_Connection=True;TrustServerCertificate=True;";
+using var c = new SqlConnection(conn);
+c.Open();
+c.Execute("IF NOT EXISTS (SELECT 1 FROM Users WHERE Id=1) INSERT INTO Users (Name, Phone, Email, PasswordHash, Role) VALUES ('Test Customer', '08011111111', 'cust@test.com', 'hash', 'CUSTOMER')");
+c.Execute("IF NOT EXISTS (SELECT 1 FROM Users WHERE Id=2) INSERT INTO Users (Name, Phone, Email, PasswordHash, Role) VALUES ('Rider Yaba', '08022222222', 'rider1@test.com', 'hash', 'RIDER')");
+c.Execute("IF NOT EXISTS (SELECT 1 FROM Users WHERE Id=3) INSERT INTO Users (Name, Phone, Email, PasswordHash, Role) VALUES ('Rider Ikeja', '08033333333', 'rider2@test.com', 'hash', 'RIDER')");
+c.Execute("IF NOT EXISTS (SELECT 1 FROM Riders WHERE UserId=2) INSERT INTO Riders (UserId, IsOnline, CurrentLat, CurrentLng) VALUES (2, 1, 6.5017, 3.3792)");
+c.Execute("IF NOT EXISTS (SELECT 1 FROM Riders WHERE UserId=3) INSERT INTO Riders (UserId, IsOnline, CurrentLat, CurrentLng) VALUES (3, 1, 6.6018, 3.3515)");
+System.Console.WriteLine("Seeded!");
