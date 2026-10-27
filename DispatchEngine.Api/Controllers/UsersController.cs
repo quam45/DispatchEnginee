@@ -1,47 +1,58 @@
-﻿using Microsoft.AspNetCore.Mvc;
+using System.ComponentModel.DataAnnotations;
+using System.Data;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
 using Dapper;
-using Microsoft.Data.SqlClient;
-using Microsoft.Extensions.Configuration;
+using DispatchEngine.Api.Errors;
+using DispatchEngine.Api.Services;
+using DispatchEngine.Core;
+using DispatchEngine.Infrastructure;
 
 namespace DispatchEngine.Api.Controllers;
 [ApiController]
 [Route("api/[controller]")]
+[Authorize]
 public class UsersController : ControllerBase {
-    private readonly IConfiguration _config;
-    public UsersController(IConfiguration config) { _config = config; }
+    private readonly IDbConnectionFactory _db;
+    public UsersController(IDbConnectionFactory db) { _db = db; }
 
-    [HttpGet("{id}")]
+    [HttpGet("{id:int}")]
     public async Task<IActionResult> GetUser(int id) {
-        using var con = new SqlConnection(_config.GetConnectionString("Default"));
-        var user = await con.QueryFirstOrDefaultAsync("SELECT Id, Name, Phone, Email, Role FROM Users WHERE Id=@id", new { id });
-        if (user == null) return NotFound();
-        var wallet = await con.QueryFirstOrDefaultAsync("SELECT * FROM Wallets WHERE UserId=@id", new { id });
-        var orders = await con.QueryAsync("SELECT * FROM Orders WHERE CustomerId=@id ORDER BY CreatedAt DESC", new { id });
-        var orderCount = await con.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM Orders WHERE CustomerId=@id", new { id });
-        var spent = await con.ExecuteScalarAsync<decimal>("SELECT ISNULL(SUM(Price),0) FROM Orders WHERE CustomerId=@id AND Status='DELIVERED'", new { id });
-        return Ok(new { user, wallet, stats = new { totalOrders = orderCount, totalSpent = spent }, recentOrders = orders });
+        if (!User.CanAccessUser(id)) return Forbid();
+        using var con = _db.CreateConnection();
+        // One round trip, four result sets
+        using var grid = await con.QueryMultipleAsync("dbo.sp_GetUserDashboard", new { UserId = id }, commandType: CommandType.StoredProcedure);
+        var user = await grid.ReadSingleOrDefaultAsync();
+        var wallet = await grid.ReadSingleOrDefaultAsync<Wallet>();
+        var stats = await grid.ReadSingleAsync();
+        var orders = await grid.ReadAsync<Order>();
+        if (user == null) return this.Error(404, "USER_NOT_FOUND", "User not found.");
+        return Ok(new { user, wallet, stats = new { totalOrders = (int)stats.TotalOrders, totalSpent = (decimal)stats.TotalSpent }, recentOrders = orders });
     }
 
-    [HttpGet("{id}/orders")]
-    public async Task<IActionResult> UserOrders(int id) {
-        using var con = new SqlConnection(_config.GetConnectionString("Default"));
-        var data = await con.QueryAsync("SELECT * FROM Orders WHERE CustomerId=@id ORDER BY CreatedAt DESC", new { id });
-        return Ok(data);
+    [HttpGet("{id:int}/orders")]
+    public async Task<IActionResult> UserOrders(int id, [FromQuery] int page = 1, [FromQuery] int pageSize = 20) {
+        if (!User.CanAccessUser(id)) return Forbid();
+        using var con = _db.CreateConnection();
+        return Ok(await con.QueryPagedAsync<Order>("dbo.sp_GetAllOrdersList", new { CustomerId = id }, page, pageSize));
     }
 
-    [HttpGet("{id}/wallet")]
-    public async Task<IActionResult> UserWallet(int id) {
-        using var con = new SqlConnection(_config.GetConnectionString("Default"));
-        var wallet = await con.QueryFirstOrDefaultAsync("SELECT * FROM Wallets WHERE UserId=@id", new { id });
-        var tx = await con.QueryAsync("SELECT t.* FROM WalletTransactions t JOIN Wallets w ON t.WalletId=w.Id WHERE w.UserId=@id ORDER BY t.CreatedAt DESC", new { id });
+    [HttpGet("{id:int}/wallet")]
+    public async Task<IActionResult> UserWallet(int id, [FromQuery] int page = 1, [FromQuery] int pageSize = 20) {
+        if (!User.CanAccessUser(id)) return Forbid();
+        using var con = _db.CreateConnection();
+        var wallet = await con.QuerySingleOrDefaultAsync<Wallet>("dbo.sp_GetWalletBalance", new { UserId = id }, commandType: CommandType.StoredProcedure);
+        if (wallet == null) return this.Error(404, "WALLET_NOT_FOUND", "Wallet not found.");
+        var tx = await con.QueryPagedAsync<WalletTransaction>("dbo.sp_GetWalletTransactions", new { UserId = id }, page, pageSize);
         return Ok(new { wallet, transactions = tx });
     }
 
-    [HttpPut("{id}")]
+    [HttpPut("{id:int}")]
     public async Task<IActionResult> UpdateUser(int id, [FromBody] UpdateUserDto dto) {
-        using var con = new SqlConnection(_config.GetConnectionString("Default"));
-        await con.ExecuteAsync("UPDATE Users SET Name=@Name, Phone=@Phone WHERE Id=@id", new { dto.Name, dto.Phone, id });
-        return Ok(new { message = "Profile updated" });
+        if (!User.CanAccessUser(id)) return Forbid();
+        using var con = _db.CreateConnection();
+        var user = await con.QuerySingleAsync("dbo.sp_UpdateUser", new { UserId = id, Name = dto.Name.Trim(), Phone = dto.Phone.Trim() }, commandType: CommandType.StoredProcedure);
+        return Ok(user);
     }
 }
-public record UpdateUserDto(string Name, string Phone);
+public record UpdateUserDto([Required, StringLength(100, MinimumLength = 2)] string Name, [Required, Phone, StringLength(20)] string Phone);

@@ -1,6 +1,57 @@
-@DispatchEngine.Api_HostAddress = http://localhost:5141
+@host = http://localhost:5141
+# Paste the "token" from a register/login response:
+@token = paste-token-here
 
-GET {{DispatchEngine.Api_HostAddress}}/weatherforecast/
-Accept: application/json
+### Register (role: CUSTOMER or RIDER)
+POST {{host}}/api/Auth/register
+Content-Type: application/json
 
-###
+{ "name": "Ada Customer", "phone": "08012345678", "email": "ada@example.com", "password": "Password123!", "role": "CUSTOMER" }
+
+### Login
+POST {{host}}/api/Auth/login
+Content-Type: application/json
+
+{ "email": "ada@example.com", "password": "Password123!" }
+
+### Create order (customer). Re-send with the same key: same order comes back, no duplicate.
+POST {{host}}/api/Orders
+Authorization: Bearer {{token}}
+Content-Type: application/json
+X-Idempotency-Key: order-0001
+
+{ "pickupLat": 6.5244, "pickupLng": 3.3792, "pickupAddress": "Yaba", "dropoffLat": 6.6018, "dropoffLng": 3.3515, "dropoffAddress": "Ikeja Mall" }
+
+### List orders (customers: own; riders: open jobs; admins: all)
+GET {{host}}/api/Orders?page=1&pageSize=20
+Authorization: Bearer {{token}}
+
+### Accept order (rider). A second rider accepting the same order gets 409 ORDER_NOT_AVAILABLE.
+POST {{host}}/api/Orders/1/accept
+Authorization: Bearer {{token}}
+
+### Complete order with the customer's 6-digit code (assigned rider only)
+POST {{host}}/api/Orders/1/complete
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{ "otp": "123456" }
+
+### Rider location ping (5 per 10s per rider, then 429)
+POST {{host}}/api/Riders/update-location?lat=6.55&lng=3.36
+Authorization: Bearer {{token}}
+
+### Withdraw from your own wallet
+POST {{host}}/api/Wallets/withdraw
+Authorization: Bearer {{token}}
+Content-Type: application/json
+X-Idempotency-Key: withdraw-0001
+
+{ "amount": 5000, "accountNumber": "0123456789", "bankCode": "058" }
+
+### Admin stats (ADMIN role)
+GET {{host}}/api/Admin/stats
+Authorization: Bearer {{token}}
+
+### Health
+GET {{host}}/health/ready

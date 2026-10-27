@@ -1,10 +1,9 @@
-﻿using Microsoft.AspNetCore.SignalR;
+using Microsoft.AspNetCore.SignalR;
 namespace DispatchEngine.Api.Hubs;
+
+// Server-to-client only. Events are pushed from controllers via IHubContext<TrackingHub>
+// after the database has accepted the change. The hub used to expose UpdateRiderLocation and
+// OrderStatusChanged as client-callable methods, which let any connected client broadcast a fake
+// rider position or order status to everyone, bypassing auth, validation and the database.
 public class TrackingHub : Hub {
-    public async Task UpdateRiderLocation(int riderId, double lat, double lng) {
-        await Clients.All.SendAsync("RiderLocationUpdated", riderId, lat, lng);
-    }
-    public async Task OrderStatusChanged(string orderRef, string status) {
-        await Clients.All.SendAsync("OrderStatus", orderRef, status);
-    }
 }
